@@ -199,6 +199,47 @@ app.post('/api/bot/announcement/create', botAuth, async (req, res) => {
     }
 });
 
+// Auto-generate keys for purchases (website webhook)
+app.post('/api/purchase/generate', async (req, res) => {
+    try {
+        const { apiKey, count, durationDays, customerDiscordId, customerEmail, orderId } = req.body;
+        
+        // Verify API key (set in environment variable)
+        if (apiKey !== process.env.PURCHASE_API_KEY) {
+            return res.status(401).json({ success: false, message: 'Invalid API key' });
+        }
+        
+        if (!count || count < 1 || count > 10) {
+            return res.status(400).json({ success: false, message: 'Count must be 1-10' });
+        }
+        
+        const days = durationDays || 3650; // Default lifetime
+        const generatedKeys = [];
+        
+        // Generate requested number of keys
+        for (let i = 0; i < count; i++) {
+            const result = await db.createKey(days, customerDiscordId || null);
+            generatedKeys.push(result.key);
+        }
+        
+        // Log purchase
+        console.log(`[PURCHASE] Order ${orderId}: Generated ${count} keys (${days} days) for ${customerDiscordId || customerEmail}`);
+        
+        res.json({
+            success: true,
+            orderId,
+            count: generatedKeys.length,
+            durationDays: days,
+            keys: generatedKeys,
+            customerDiscordId,
+            customerEmail
+        });
+    } catch (error) {
+        console.error('Purchase generation error:', error);
+        res.status(500).json({ success: false, message: 'Failed to generate keys' });
+    }
+});
+
 app.get('/api/ping', (req, res) => {
     res.json({ success: true, message: 'Pong', timestamp: new Date().toISOString() });
 });
